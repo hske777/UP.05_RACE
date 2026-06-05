@@ -301,12 +301,9 @@ class RacingGame:
         self.race_started = False
 
         self.game_speed = 5  # начальная скорость игрока
-        self.enemy_speed = 5  # начальная скорость противника
         self.player_position_index = 2
-        self.enemy_position_index = 4
 
         self.player_distance = 0
-        self.enemy_distance = 0
         self.total_distance = 7000
 
         self.key_up = False
@@ -319,23 +316,12 @@ class RacingGame:
         self.start_time = 0
         self.finish_time = 0
 
-        # Таймер для увеличения скорости противника
-        self.last_speed_increase_time = 0
-
-        # ИИ противника: запоминаем последнее решение для плавности
-        self.ai_decision_timer = 0
-        self.enemy_target_lane = 4
-
         self.draw_road()
 
-        # РАЗНЫЕ Y-ПОЗИЦИИ ДЛЯ МАШИН
-        # Игрок внизу экрана
+        # Y-ПОЗИЦИЯ ДЛЯ МАШИНЫ
         player_y_position = HEIGHT - 150
-        # Соперник выше по дороге (на 250 пикселей выше, чтобы были видны оба)
-        enemy_y_position = HEIGHT - 250
 
         self.player = self.create_car(LANE_POSITIONS[self.player_position_index], player_y_position, "#3366FF")
-        self.enemy = self.create_car(LANE_POSITIONS[self.enemy_position_index], enemy_y_position, "#FF6600")
 
         self.obstacles = []
         if self.current_track == "forest":
@@ -533,7 +519,6 @@ class RacingGame:
             self.canvas.delete(self.countdown_text)
             self.race_started = True
             self.start_time = time.time()
-            self.last_speed_increase_time = time.time()
             self.update()
 
     def create_car(self, x, y, color):
@@ -642,88 +627,6 @@ class RacingGame:
         self.finish_line.append(text)
         self.finish_visible = True
 
-    def find_obstacle_ahead(self, lane, car_y, look_ahead=300):
-        """Проверяет, есть ли препятствие впереди на указанной полосе"""
-        for obs in self.obstacles:
-            if obs["lane"] == lane:
-                distance = obs["y"] - car_y
-                if 0 < distance < look_ahead:
-                    return obs
-        return None
-
-    def get_safe_lanes(self, car_y, look_ahead=250):
-        """Возвращает список безопасных полос (без препятствий впереди)"""
-        safe_lanes = []
-        for lane in range(6):
-            if not self.find_obstacle_ahead(lane, car_y, look_ahead):
-                safe_lanes.append(lane)
-        return safe_lanes
-
-    def update_enemy_ai(self):
-        """Независимый ИИ противника - едет как отдельный гонщик"""
-        if not self.enemy or self.finished or not self.race_started:
-            return
-
-        # Получаем координаты противника
-        enemy_coords = self.get_car_coords(self.enemy)
-        if not enemy_coords:
-            return
-
-        enemy_y = enemy_coords[1]
-        enemy_center_x = (enemy_coords[0] + enemy_coords[2]) / 2
-
-        # Определяем текущую полосу противника
-        current_lane = 2
-        for i, lane_x in enumerate(LANE_POSITIONS):
-            if abs(enemy_center_x - lane_x) < 60:
-                current_lane = i
-                break
-
-        # Получаем безопасные полосы
-        safe_lanes = self.get_safe_lanes(enemy_y, 250)
-
-        # Если нет безопасных полос, оставляем текущую
-        if not safe_lanes:
-            safe_lanes = [current_lane]
-
-        # --- СТРАТЕГИЯ ИИ ---
-
-        # 1. Если впереди есть препятствие на текущей полосе
-        obstacle_ahead = self.find_obstacle_ahead(current_lane, enemy_y, 250)
-
-        if obstacle_ahead:
-            # Уходим с опасной полосы на ближайшую безопасную
-            best_lane = min(safe_lanes, key=lambda lane: abs(lane - current_lane))
-            if best_lane != current_lane:
-                self.enemy_target_lane = best_lane
-                self.move_car_to_position(self.enemy, self.enemy_target_lane)
-            return
-
-        # 2. Случайное изменение полосы для разнообразия
-        self.ai_decision_timer += 1
-        if self.ai_decision_timer > random.randint(60, 90):
-            self.ai_decision_timer = 0
-
-            if random.random() < 0.7 and len(safe_lanes) > 1:
-                new_lane = random.choice([lane for lane in safe_lanes if lane != current_lane])
-                self.enemy_target_lane = new_lane
-                self.move_car_to_position(self.enemy, self.enemy_target_lane)
-            else:
-                self.enemy_target_lane = current_lane
-
-        # 3. Плавное движение к целевой полосе
-        if self.enemy_target_lane != current_lane:
-            path_clear = True
-            step = 1 if self.enemy_target_lane > current_lane else -1
-
-            for lane in range(current_lane + step, self.enemy_target_lane + step, step):
-                if self.find_obstacle_ahead(lane, enemy_y, 200):
-                    path_clear = False
-                    break
-
-            if path_clear:
-                self.move_car_to_position(self.enemy, self.enemy_target_lane)
-
     def check_collision(self, car, obstacles_list):
         car_coords = self.get_car_coords(car)
         if not car_coords:
@@ -766,9 +669,9 @@ class RacingGame:
             return True
         return False
 
-    def show_finish_window(self, victory, race_time):
+    def show_finish_window(self, race_time, is_new_record=False):
         finish_window = tk.Toplevel(self.root)
-        finish_window.title("Результат гонки")
+        finish_window.title("Победа!")
         finish_window.geometry(f"{WIDTH}x{HEIGHT}")
         finish_window.state("zoomed")
         finish_window.configure(bg="#1a1a2e")
@@ -778,46 +681,29 @@ class RacingGame:
         center_frame = tk.Frame(finish_window, bg="#1a1a2e")
         center_frame.place(relx=0.5, rely=0.5, anchor="center")
 
-        if victory:
-            title = "ПОБЕДА!"
-            title_color = "#00FF00"
-            message = "Вы финишировали первым!"
-        else:
-            title = "ПОРАЖЕНИЕ!"
-            title_color = "#FF0000"
-            message = "Соперник финишировал первым!"
-
         tk.Label(
             center_frame,
-            text=title,
+            text="ФИНИШ!",
             font=("Arial", 80, "bold"),
-            fg=title_color,
+            fg="#00FF00",
             bg="#1a1a2e"
         ).pack(pady=50)
 
         tk.Label(
             center_frame,
-            text=message,
-            font=("Arial", 40, "bold"),
-            fg="white",
+            text=f"Ваше время: {race_time:.2f} сек",
+            font=("Arial", 48),
+            fg="yellow",
             bg="#1a1a2e"
         ).pack(pady=30)
 
-        tk.Label(
-            center_frame,
-            text=f"Ваше время: {race_time:.2f} сек",
-            font=("Arial", 36),
-            fg="yellow",
-            bg="#1a1a2e"
-        ).pack(pady=20)
-
         best = self.load_best(self.current_track)
         if best:
-            if victory and race_time < best:
+            if is_new_record:
                 tk.Label(
                     center_frame,
                     text="★ НОВЫЙ РЕКОРД! ★",
-                    font=("Arial", 32, "bold"),
+                    font=("Arial", 36, "bold"),
                     fg="#FFD700",
                     bg="#1a1a2e"
                 ).pack(pady=20)
@@ -825,7 +711,7 @@ class RacingGame:
                 tk.Label(
                     center_frame,
                     text=f"Рекорд трассы: {best:.2f} сек",
-                    font=("Arial", 28),
+                    font=("Arial", 32),
                     fg="#FFD700",
                     bg="#1a1a2e"
                 ).pack(pady=20)
@@ -862,33 +748,16 @@ class RacingGame:
 
         # Проверяем для игрока
         player_remaining = self.total_distance - self.player_distance
-        # Проверяем для противника
-        enemy_remaining = self.total_distance - self.enemy_distance
 
-        # Если кто-то достиг финиша
-        if player_remaining <= -10 or enemy_remaining <= -10:
+        # Если игрок достиг финиша
+        if player_remaining <= -10:
             self.finish_triggered = True
             self.finished = True
             self.race_started = False
             self.game_speed = 0
-            self.enemy_speed = 0
             self.finish_time = time.time() - self.start_time
-
-            # Определяем победителя по дистанции
-            if self.player_distance >= self.total_distance and self.enemy_distance >= self.total_distance:
-                if self.player_distance > self.enemy_distance:
-                    self.save_best(self.finish_time)
-                    self.show_finish_window(True, self.finish_time)
-                else:
-                    self.show_finish_window(False, self.finish_time)
-            elif self.player_distance >= self.total_distance:
-                self.save_best(self.finish_time)
-                self.show_finish_window(True, self.finish_time)
-            elif self.enemy_distance >= self.total_distance:
-                self.show_finish_window(False, self.finish_time)
-            else:
-                self.save_best(self.finish_time)
-                self.show_finish_window(True, self.finish_time)
+            is_new_record = self.save_best(self.finish_time)
+            self.show_finish_window(self.finish_time, is_new_record)
 
     def show_game_over_window(self):
         game_over_window = tk.Toplevel(self.root)
@@ -904,7 +773,7 @@ class RacingGame:
 
         tk.Label(
             center_frame,
-            text="ПОРАЖЕНИЕ!",
+            text="АВАРИЯ!",
             font=("Arial", 80, "bold"),
             fg="red",
             bg="#1a1a2e"
@@ -949,8 +818,6 @@ class RacingGame:
         self.game_over = False
         self.finished = False
         self.finish_triggered = False
-        self.enemy_target_lane = 4
-        self.ai_decision_timer = 0
 
         if hasattr(self, 'game_frame'):
             self.game_frame.destroy()
@@ -1036,22 +903,12 @@ class RacingGame:
                 self.move_car_to_position(self.player, self.player_position_index)
                 self.root.after(80, lambda: None)
 
-            # Увеличение скорости противника каждую секунду
-            current_time = time.time()
-            if current_time - self.last_speed_increase_time >= 1.0:
-                if self.key_up:
-                    self.enemy_speed = min(15, self.enemy_speed + 1.0)
-                else:
-                    self.enemy_speed = min(15, self.enemy_speed + 0.833)
-                self.last_speed_increase_time = current_time
-
             # Обновление расстояния
             if not self.finished:
                 self.player_distance += self.game_speed
-                self.enemy_distance += self.enemy_speed
 
             # Движение линий разметки
-            scroll_speed = (self.game_speed + self.enemy_speed) / 2
+            scroll_speed = self.game_speed
             for line in self.lines:
                 self.canvas.move(line, 0, scroll_speed)
                 coords = self.canvas.coords(line)
@@ -1085,25 +942,7 @@ class RacingGame:
                     self.canvas.delete(obs["id"])
                     self.obstacles.remove(obs)
 
-            # Движение противника
-            if self.enemy:
-                self.move_car(self.enemy, 0, self.enemy_speed)
-
-            # Обновление ИИ противника
-            self.update_enemy_ai()
-
             # Проверка столкновений
-            if self.check_collision(self.enemy, self.obstacles):
-                self.finish_triggered = True
-                self.finished = True
-                self.race_started = False
-                self.game_speed = 0
-                self.enemy_speed = 0
-                self.finish_time = time.time() - self.start_time
-                self.save_best(self.finish_time)
-                self.show_finish_window(True, self.finish_time)
-                return
-
             if not self.finished and self.check_collision(self.player, self.obstacles):
                 self.game_over = True
                 self.race_started = False
@@ -1111,7 +950,7 @@ class RacingGame:
                 return
 
             # Финишная линия
-            remaining = self.total_distance - max(self.player_distance, self.enemy_distance)
+            remaining = self.total_distance - self.player_distance
             if remaining <= 500 and not self.finish_visible:
                 self.spawn_finish_line()
 
@@ -1126,39 +965,24 @@ class RacingGame:
                 race_time = time.time() - self.start_time
                 speed_kmh = int(self.game_speed * 12)
                 best = self.load_best(self.current_track)
-                remaining_m = max(-10, int((self.total_distance - max(self.player_distance, self.enemy_distance)) / 10))
+                remaining_m = max(-10, int((self.total_distance - self.player_distance) / 10))
 
-                # Определяем место по пройденной дистанции
-                if self.player_distance > self.enemy_distance:
-                    place = "1/2"
-                    place_color = "#00FF00"
-                else:
-                    place = "2/2"
-                    place_color = "#FFA500"
-
-                txt = f"МЕСТО: {place}   |   ВРЕМЯ: {race_time:.2f} сек   |   СКОРОСТЬ: {speed_kmh} км/ч   |   ДО ФИНИША: {remaining_m} м"
+                txt = f"ВРЕМЯ: {race_time:.2f} сек   |   СКОРОСТЬ: {speed_kmh} км/ч   |   ДО ФИНИША: {remaining_m} м"
                 if best:
                     txt += f"   |   РЕКОРД: {best:.2f} сек"
 
-                self.info.config(text=txt, fg=place_color)
+                self.info.config(text=txt, fg="white")
 
-                # Прогресс-бары
+                # Прогресс-бар
                 self.canvas.delete("progress")
                 progress_width = 400
                 player_progress = min(1.0, self.player_distance / self.total_distance)
-                enemy_progress = min(1.0, self.enemy_distance / self.total_distance)
                 bar_x = WIDTH // 2 - progress_width // 2
 
                 # Прогресс игрока (синий)
                 self.canvas.create_rectangle(bar_x, 20, bar_x + progress_width, 35, fill="#444", outline="white",
                                              tags="progress")
                 self.canvas.create_rectangle(bar_x, 20, bar_x + progress_width * player_progress, 35, fill="#3366FF",
-                                             outline="", tags="progress")
-
-                # Прогресс противника (оранжевый)
-                self.canvas.create_rectangle(bar_x, 40, bar_x + progress_width, 55, fill="#444", outline="white",
-                                             tags="progress")
-                self.canvas.create_rectangle(bar_x, 40, bar_x + progress_width * enemy_progress, 55, fill="#FF6600",
                                              outline="", tags="progress")
 
         self.root.after(16, self.update)
