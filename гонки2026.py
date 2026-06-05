@@ -4,6 +4,7 @@ import random
 import time
 import json
 import os
+import math
 
 WIDTH = 1920
 HEIGHT = 1080
@@ -30,7 +31,17 @@ FOREST_OBSTACLES = [
     (3, -4500, "block"), (0, -5000, "tree"), (5, -5500, "rock"),
 ]
 
-SAVE_FILE = "record.json"
+# ФИКСИРОВАННЫЕ ПРЕПЯТСТВИЯ ДЛЯ ГОРОДСКОЙ ТРАССЫ
+CITY_OBSTACLES = [
+    (2, -400, "cone"), (4, -700, "cone"), (1, -1100, "box"),
+    (3, -1500, "cone"), (0, -1900, "box"), (5, -2300, "cone"),
+    (2, -2700, "box"), (4, -3100, "cone"), (1, -3500, "box"),
+    (3, -3900, "cone"), (5, -4300, "box"), (0, -4700, "cone"),
+    (2, -5100, "box"), (4, -5500, "cone"), (1, -5900, "box"),
+]
+
+SAVE_FILE_FOREST = "record_forest.json"
+SAVE_FILE_CITY = "record_city.json"
 
 
 class RacingGame:
@@ -41,7 +52,7 @@ class RacingGame:
         self.root.state("zoomed")
 
         self.current_track = None
-        self.menu_frame = tk.Frame(root, bg="black")  # ЧЕРНЫЙ ФОН
+        self.menu_frame = tk.Frame(root, bg="black")
         self.menu_frame.pack(fill="both", expand=True)
 
         self.show_menu()
@@ -50,11 +61,9 @@ class RacingGame:
         for w in self.menu_frame.winfo_children():
             w.destroy()
 
-        # ЧЕРНЫЙ ФОН через canvas
         menu_canvas = tk.Canvas(self.menu_frame, width=WIDTH, height=HEIGHT, bg="black", highlightthickness=0)
         menu_canvas.pack(fill="both", expand=True)
 
-        # Заголовок
         menu_canvas.create_text(
             WIDTH // 2, 200,
             text="ГОНКИ",
@@ -62,16 +71,6 @@ class RacingGame:
             fill="red"
         )
 
-        best = self.load_best()
-        if best:
-            menu_canvas.create_text(
-                WIDTH // 2, 300,
-                text=f"Лучшее время: {best:.2f} сек",
-                font=("Arial", 28),
-                fill="yellow"
-            )
-
-        # Кнопка "ВЫБОР ТРАССЫ" (на canvas)
         btn_bg = tk.Frame(self.menu_frame, bg="black")
         btn_bg.place(x=WIDTH // 2 - 150, y=400, width=300, height=60)
 
@@ -86,7 +85,6 @@ class RacingGame:
         )
         select_btn.pack(fill="both", expand=True)
 
-        # Кнопка "ВЫХОД"
         btn_bg2 = tk.Frame(self.menu_frame, bg="black")
         btn_bg2.place(x=WIDTH // 2 - 150, y=490, width=300, height=60)
 
@@ -101,7 +99,6 @@ class RacingGame:
         )
         exit_btn.pack(fill="both", expand=True)
 
-        # Управление
         menu_canvas.create_text(
             WIDTH // 2, 600,
             text="Управление: ↑/↓ - скорость | ←/→ - поворот | ESC - выход в главное меню",
@@ -109,14 +106,12 @@ class RacingGame:
             fill="gray"
         )
 
-        # Звезды на фоне для красоты
         for _ in range(100):
             x = random.randint(0, WIDTH)
             y = random.randint(0, HEIGHT)
             menu_canvas.create_oval(x, y, x + 2, y + 2, fill="white", outline="")
 
     def show_track_selection(self):
-        """Окно выбора трассы 1920x1080"""
         self.menu_frame.pack_forget()
 
         self.track_window = tk.Toplevel(self.root)
@@ -127,7 +122,6 @@ class RacingGame:
         self.track_window.transient(self.root)
         self.track_window.grab_set()
 
-        # Фон с звездами
         track_canvas = tk.Canvas(self.track_window, width=WIDTH, height=HEIGHT, bg="black", highlightthickness=0)
         track_canvas.pack(fill="both", expand=True)
 
@@ -143,32 +137,48 @@ class RacingGame:
             fill="yellow"
         )
 
-        # Лесная трасса (квадрат)
-        forest_x = WIDTH // 2 - 250
+        # Лесная трасса
+        forest_x = WIDTH // 2 - 550
         forest_y = 300
+        forest_width = 500
+        forest_height = 450
 
-        # Квадрат
         track_canvas.create_rectangle(
-            forest_x, forest_y, forest_x + 500, forest_y + 400,
+            forest_x, forest_y, forest_x + forest_width, forest_y + forest_height,
             fill="#228B22", outline="white", width=5
         )
 
-        # Эмодзи дерева
         track_canvas.create_text(
-            forest_x + 250, forest_y + 150,
+            forest_x + forest_width // 2, forest_y + 150,
             text="🌲",
             font=("Arial", 100)
         )
 
         track_canvas.create_text(
-            forest_x + 250, forest_y + 250,
+            forest_x + forest_width // 2, forest_y + 250,
             text="ЛЕСНАЯ ТРАССА",
             font=("Arial", 28, "bold"),
             fill="white"
         )
 
-        # Кнопка выбора
-        select_btn = tk.Button(
+        # Рекорд лесной трассы
+        forest_best = self.load_best("forest")
+        if forest_best:
+            track_canvas.create_text(
+                forest_x + forest_width // 2, forest_y + 320,
+                text=f"Рекорд: {forest_best:.2f} сек",
+                font=("Arial", 20),
+                fill="#FFD700"
+            )
+        else:
+            track_canvas.create_text(
+                forest_x + forest_width // 2, forest_y + 320,
+                text="Рекорд: ---",
+                font=("Arial", 20),
+                fill="#FFD700"
+            )
+
+        select_btn_forest = tk.Button(
             self.track_window,
             text="ВЫБРАТЬ",
             font=("Arial", 24, "bold"),
@@ -178,9 +188,61 @@ class RacingGame:
             cursor="hand2",
             command=lambda: self.select_track("forest")
         )
-        select_btn.place(x=forest_x + 150, y=forest_y + 330, width=200, height=50)
+        select_btn_forest.place(x=forest_x + 150, y=forest_y + 370, width=200, height=50)
 
-        # Кнопка "Главное меню"
+        # Городская трасса
+        city_x = WIDTH // 2 + 50
+        city_y = 300
+        city_width = 500
+        city_height = 450
+
+        track_canvas.create_rectangle(
+            city_x, city_y, city_x + city_width, city_y + city_height,
+            fill="#808080", outline="white", width=5
+        )
+
+        track_canvas.create_text(
+            city_x + city_width // 2, city_y + 150,
+            text="🏙️",
+            font=("Arial", 100)
+        )
+
+        track_canvas.create_text(
+            city_x + city_width // 2, city_y + 250,
+            text="ГОРОДСКАЯ ТРАССА",
+            font=("Arial", 28, "bold"),
+            fill="white"
+        )
+
+        # Рекорд городской трассы
+        city_best = self.load_best("city")
+        if city_best:
+            track_canvas.create_text(
+                city_x + city_width // 2, city_y + 320,
+                text=f"Рекорд: {city_best:.2f} сек",
+                font=("Arial", 20),
+                fill="#FFD700"
+            )
+        else:
+            track_canvas.create_text(
+                city_x + city_width // 2, city_y + 320,
+                text="Рекорд: ---",
+                font=("Arial", 20),
+                fill="#FFD700"
+            )
+
+        select_btn_city = tk.Button(
+            self.track_window,
+            text="ВЫБРАТЬ",
+            font=("Arial", 24, "bold"),
+            bg="blue",
+            fg="white",
+            width=15,
+            cursor="hand2",
+            command=lambda: self.select_track("city")
+        )
+        select_btn_city.place(x=city_x + 150, y=city_y + 370, width=200, height=50)
+
         menu_btn = tk.Button(
             self.track_window,
             text="ГЛАВНОЕ МЕНЮ",
@@ -191,7 +253,7 @@ class RacingGame:
             cursor="hand2",
             command=self.back_to_menu
         )
-        menu_btn.place(x=WIDTH // 2 - 150, y=750, width=300, height=60)
+        menu_btn.place(x=WIDTH // 2 - 150, y=800, width=300, height=60)
 
         self.track_window.bind("<Escape>", lambda e: self.back_to_menu())
         self.track_window.focus_set()
@@ -217,20 +279,29 @@ class RacingGame:
         self.info = tk.Label(self.game_frame, font=("Arial", 18), bg="black", fg="white")
         self.info.pack(fill="x")
 
+        # Выбор цвета фона в зависимости от трассы
+        if self.current_track == "forest":
+            bg_color = "#1a3a1a"  # Темно-зеленый для лесной трассы
+        elif self.current_track == "city":
+            bg_color = "#2a2a3a"  # Темно-синий/серый для городской трассы
+        else:
+            bg_color = "#1a1a2e"  # Стандартный цвет
+
         self.canvas = tk.Canvas(
             self.game_frame,
             width=WIDTH,
             height=HEIGHT - 50,
-            bg="#1a1a2e"
+            bg=bg_color
         )
         self.canvas.pack()
 
         self.paused = False
         self.game_over = False
-        self.race_started = False
         self.finished = False
+        self.race_started = False
 
-        self.game_speed = 5
+        self.game_speed = 5  # начальная скорость игрока
+        self.enemy_speed = 5  # начальная скорость противника
         self.player_position_index = 2
         self.enemy_position_index = 4
 
@@ -248,24 +319,37 @@ class RacingGame:
         self.start_time = 0
         self.finish_time = 0
 
-        # Рисуем дорогу
+        # Таймер для увеличения скорости противника
+        self.last_speed_increase_time = 0
+
+        # ИИ противника: запоминаем последнее решение для плавности
+        self.ai_decision_timer = 0
+        self.enemy_target_lane = 4
+
         self.draw_road()
 
-        car_y_position = HEIGHT - 150
+        # РАЗНЫЕ Y-ПОЗИЦИИ ДЛЯ МАШИН
+        # Игрок внизу экрана
+        player_y_position = HEIGHT - 150
+        # Соперник выше по дороге (на 250 пикселей выше, чтобы были видны оба)
+        enemy_y_position = HEIGHT - 250
 
-        # Создаем игрока
-        self.player = self.create_car(LANE_POSITIONS[self.player_position_index], car_y_position, "#3366FF")
+        self.player = self.create_car(LANE_POSITIONS[self.player_position_index], player_y_position, "#3366FF")
+        self.enemy = self.create_car(LANE_POSITIONS[self.enemy_position_index], enemy_y_position, "#FF6600")
 
-        # Создаем противника
-        self.enemy = self.create_car(LANE_POSITIONS[self.enemy_position_index], car_y_position, "#FF6600")
-
-        # Загружаем препятствия
         self.obstacles = []
         if self.current_track == "forest":
             for lane, y_pos, obs_type in FOREST_OBSTACLES:
                 self.spawn_fixed_obstacle(lane, y_pos, obs_type)
+        elif self.current_track == "city":
+            for lane, y_pos, obs_type in CITY_OBSTACLES:
+                self.spawn_fixed_obstacle(lane, y_pos, obs_type)
 
-        # Линии разметки
+        # Добавляем городские декорации (здания) для городской трассы
+        self.buildings = []
+        if self.current_track == "city":
+            self.spawn_city_buildings()
+
         self.lines = []
         for y in range(0, HEIGHT + 200, 80):
             line = self.canvas.create_rectangle(
@@ -275,10 +359,10 @@ class RacingGame:
             )
             self.lines.append(line)
 
-        # Финишная линия (Y = 100)
         self.finish_line_y = 100
         self.finish_line = None
         self.finish_visible = False
+        self.finish_triggered = False
 
         self.root.bind("<KeyPress>", self.key_press)
         self.root.bind("<KeyRelease>", self.key_release)
@@ -287,8 +371,146 @@ class RacingGame:
 
         self.root.focus_set()
 
-        # Запускаем обратный отсчет
         self.countdown()
+
+    def check_building_collision(self, x, y, width, height, existing_buildings, side):
+        """Проверяет, не пересекается ли новое здание с существующими"""
+        for building in existing_buildings:
+            # Проверяем пересечение прямоугольников
+            if (x < building["x"] + building["width"] + 20 and
+                    x + width + 20 > building["x"] and
+                    y < building["y"] + building["height"] + 30 and
+                    y + height + 30 > building["y"]):
+                return True
+        return False
+
+    def spawn_city_buildings(self):
+        """Создает городские здания по бокам дороги на безопасном расстоянии"""
+
+        # Параметры отступов
+        left_area_start = 30  # Начало левой зоны
+        left_area_end = ROAD_LEFT - 60  # Конец левой зоны (отступ от дороги)
+
+        right_area_start = ROAD_RIGHT + 60  # Начало правой зоны (отступ от дороги)
+        right_area_end = WIDTH - 100  # Конец правой зоны
+
+        left_buildings = []
+        right_buildings = []
+
+        # Генерируем здания слева
+        for i in range(12):
+            max_attempts = 50
+            for attempt in range(max_attempts):
+                width = random.randint(70, 140)
+                height = random.randint(130, 250)
+
+                # X координата в безопасной зоне слева
+                x = random.randint(left_area_start, left_area_end - width)
+
+                # Y координата (разбрасываем по всей высоте)
+                y = random.randint(-HEIGHT, HEIGHT + 500)
+
+                # Проверяем пересечение с другими зданиями слева
+                if not self.check_building_collision(x, y, width, height, left_buildings, "left"):
+                    # Создаем здание
+                    building_color = random.choice(["#4a4a4a", "#5a5a5a", "#6a6a6a", "#3a3a3a", "#585858", "#707070"])
+
+                    # Основное здание
+                    building = self.canvas.create_rectangle(
+                        x, y, x + width, y + height,
+                        fill=building_color,
+                        outline="#888888",
+                        width=2,
+                        tags="building"
+                    )
+
+                    # Окна
+                    windows = []
+                    window_size = 15
+                    window_spacing = 22
+
+                    for wx in range(x + 12, x + width - 12, window_spacing):
+                        for wy in range(y + 15, y + height - 15, window_spacing):
+                            # Пропускаем окна, которые могут вылезти за пределы
+                            if wx + window_size <= x + width - 5 and wy + window_size <= y + height - 5:
+                                window_color = random.choice(["#ffffaa", "#ffcc66", "#ffaa66", "#ffee88"])
+                                window = self.canvas.create_rectangle(
+                                    wx, wy, wx + window_size, wy + window_size,
+                                    fill=window_color,
+                                    outline="#ccccaa",
+                                    width=1,
+                                    tags="building"
+                                )
+                                windows.append(window)
+
+                    left_buildings.append({
+                        "id": building,
+                        "windows": windows,
+                        "x": x,
+                        "y": y,
+                        "width": width,
+                        "height": height
+                    })
+                    break
+
+        # Генерируем здания справа
+        for i in range(12):
+            max_attempts = 50
+            for attempt in range(max_attempts):
+                width = random.randint(70, 140)
+                height = random.randint(130, 250)
+
+                # X координата в безопасной зоне справа
+                x = random.randint(right_area_start, right_area_end - width)
+
+                # Y координата (разбрасываем по всей высоте)
+                y = random.randint(-HEIGHT, HEIGHT + 500)
+
+                # Проверяем пересечение с другими зданиями справа
+                if not self.check_building_collision(x, y, width, height, right_buildings, "right"):
+                    # Создаем здание
+                    building_color = random.choice(["#4a4a4a", "#5a5a5a", "#6a6a6a", "#3a3a3a", "#585858", "#707070"])
+
+                    # Основное здание
+                    building = self.canvas.create_rectangle(
+                        x, y, x + width, y + height,
+                        fill=building_color,
+                        outline="#888888",
+                        width=2,
+                        tags="building"
+                    )
+
+                    # Окна
+                    windows = []
+                    window_size = 15
+                    window_spacing = 22
+
+                    for wx in range(x + 12, x + width - 12, window_spacing):
+                        for wy in range(y + 15, y + height - 15, window_spacing):
+                            # Пропускаем окна, которые могут вылезти за пределы
+                            if wx + window_size <= x + width - 5 and wy + window_size <= y + height - 5:
+                                window_color = random.choice(["#ffffaa", "#ffcc66", "#ffaa66", "#ffee88"])
+                                window = self.canvas.create_rectangle(
+                                    wx, wy, wx + window_size, wy + window_size,
+                                    fill=window_color,
+                                    outline="#ccccaa",
+                                    width=1,
+                                    tags="building"
+                                )
+                                windows.append(window)
+
+                    right_buildings.append({
+                        "id": building,
+                        "windows": windows,
+                        "x": x,
+                        "y": y,
+                        "width": width,
+                        "height": height
+                    })
+                    break
+
+        # Объединяем оба списка
+        self.buildings = left_buildings + right_buildings
 
     def countdown(self):
         self.countdown_value = 3
@@ -311,6 +533,7 @@ class RacingGame:
             self.canvas.delete(self.countdown_text)
             self.race_started = True
             self.start_time = time.time()
+            self.last_speed_increase_time = time.time()
             self.update()
 
     def create_car(self, x, y, color):
@@ -346,14 +569,22 @@ class RacingGame:
         return self.canvas.coords(car["body"])
 
     def draw_road(self):
+        # Выбор цвета обочин в зависимости от трассы
+        if self.current_track == "forest":
+            roadside_color = "#1a5c1a"  # Темно-зеленый для леса
+        elif self.current_track == "city":
+            roadside_color = "#3a3a4a"  # Темно-серый для города
+        else:
+            roadside_color = "#228B22"
+
         self.canvas.create_rectangle(
             ROAD_LEFT, 0, ROAD_RIGHT, HEIGHT,
             fill="#333333", outline=""
         )
         self.canvas.create_line(ROAD_LEFT, 0, ROAD_LEFT, HEIGHT, fill="yellow", width=5)
         self.canvas.create_line(ROAD_RIGHT, 0, ROAD_RIGHT, HEIGHT, fill="yellow", width=5)
-        self.canvas.create_rectangle(0, 0, ROAD_LEFT, HEIGHT, fill="#228B22", outline="")
-        self.canvas.create_rectangle(ROAD_RIGHT, 0, WIDTH, HEIGHT, fill="#228B22", outline="")
+        self.canvas.create_rectangle(0, 0, ROAD_LEFT, HEIGHT, fill=roadside_color, outline="")
+        self.canvas.create_rectangle(ROAD_RIGHT, 0, WIDTH, HEIGHT, fill=roadside_color, outline="")
 
     def spawn_fixed_obstacle(self, lane, y_pos, obs_type):
         if obs_type == "block":
@@ -365,6 +596,12 @@ class RacingGame:
         elif obs_type == "tree":
             color = "#006400"
             w, h = 20, 35
+        elif obs_type == "cone":
+            color = "#FF6600"
+            w, h = 18, 25
+        elif obs_type == "box":
+            color = "#8B6914"
+            w, h = 25, 25
         else:
             color = "#FFA500"
             w, h = 20, 20
@@ -388,7 +625,6 @@ class RacingGame:
         })
 
     def spawn_finish_line(self):
-        """Создание финишной линии на Y = 100"""
         if self.finish_line:
             for item in self.finish_line:
                 self.canvas.delete(item)
@@ -406,48 +642,87 @@ class RacingGame:
         self.finish_line.append(text)
         self.finish_visible = True
 
+    def find_obstacle_ahead(self, lane, car_y, look_ahead=300):
+        """Проверяет, есть ли препятствие впереди на указанной полосе"""
+        for obs in self.obstacles:
+            if obs["lane"] == lane:
+                distance = obs["y"] - car_y
+                if 0 < distance < look_ahead:
+                    return obs
+        return None
+
+    def get_safe_lanes(self, car_y, look_ahead=250):
+        """Возвращает список безопасных полос (без препятствий впереди)"""
+        safe_lanes = []
+        for lane in range(6):
+            if not self.find_obstacle_ahead(lane, car_y, look_ahead):
+                safe_lanes.append(lane)
+        return safe_lanes
+
     def update_enemy_ai(self):
-        """ИИ противника - пытается обогнать игрока"""
-        if not self.enemy:
+        """Независимый ИИ противника - едет как отдельный гонщик"""
+        if not self.enemy or self.finished or not self.race_started:
             return
 
-        self.move_car(self.enemy, 0, self.game_speed)
-
+        # Получаем координаты противника
         enemy_coords = self.get_car_coords(self.enemy)
-        player_coords = self.get_car_coords(self.player)
-
-        if not enemy_coords or not player_coords:
+        if not enemy_coords:
             return
 
         enemy_y = enemy_coords[1]
-        player_y = player_coords[1]
         enemy_center_x = (enemy_coords[0] + enemy_coords[2]) / 2
 
-        current_pos = 2
+        # Определяем текущую полосу противника
+        current_lane = 2
         for i, lane_x in enumerate(LANE_POSITIONS):
             if abs(enemy_center_x - lane_x) < 60:
-                current_pos = i
+                current_lane = i
                 break
 
-        # Обгон
-        if enemy_y >= player_y - 30:
-            if current_pos != self.player_position_index:
-                self.move_car_to_position(self.enemy, self.player_position_index)
+        # Получаем безопасные полосы
+        safe_lanes = self.get_safe_lanes(enemy_y, 250)
 
-        # Уклонение от препятствий
-        danger_zone = 200
-        pos_danger = {0: False, 1: False, 2: False, 3: False, 4: False, 5: False}
+        # Если нет безопасных полос, оставляем текущую
+        if not safe_lanes:
+            safe_lanes = [current_lane]
 
-        for obs in self.obstacles:
-            if obs["y"] > enemy_y - danger_zone and obs["y"] < enemy_y + 50:
-                pos_danger[obs["lane"]] = True
+        # --- СТРАТЕГИЯ ИИ ---
 
-        if pos_danger[current_pos]:
-            safe_positions = [p for p in range(6) if not pos_danger[p]]
-            if safe_positions:
-                new_pos = min(safe_positions, key=lambda p: abs(p - current_pos))
-                if new_pos != current_pos:
-                    self.move_car_to_position(self.enemy, new_pos)
+        # 1. Если впереди есть препятствие на текущей полосе
+        obstacle_ahead = self.find_obstacle_ahead(current_lane, enemy_y, 250)
+
+        if obstacle_ahead:
+            # Уходим с опасной полосы на ближайшую безопасную
+            best_lane = min(safe_lanes, key=lambda lane: abs(lane - current_lane))
+            if best_lane != current_lane:
+                self.enemy_target_lane = best_lane
+                self.move_car_to_position(self.enemy, self.enemy_target_lane)
+            return
+
+        # 2. Случайное изменение полосы для разнообразия
+        self.ai_decision_timer += 1
+        if self.ai_decision_timer > random.randint(60, 90):
+            self.ai_decision_timer = 0
+
+            if random.random() < 0.7 and len(safe_lanes) > 1:
+                new_lane = random.choice([lane for lane in safe_lanes if lane != current_lane])
+                self.enemy_target_lane = new_lane
+                self.move_car_to_position(self.enemy, self.enemy_target_lane)
+            else:
+                self.enemy_target_lane = current_lane
+
+        # 3. Плавное движение к целевой полосе
+        if self.enemy_target_lane != current_lane:
+            path_clear = True
+            step = 1 if self.enemy_target_lane > current_lane else -1
+
+            for lane in range(current_lane + step, self.enemy_target_lane + step, step):
+                if self.find_obstacle_ahead(lane, enemy_y, 200):
+                    path_clear = False
+                    break
+
+            if path_clear:
+                self.move_car_to_position(self.enemy, self.enemy_target_lane)
 
     def check_collision(self, car, obstacles_list):
         car_coords = self.get_car_coords(car)
@@ -464,19 +739,29 @@ class RacingGame:
                     return True
         return False
 
-    def load_best(self):
-        if os.path.exists(SAVE_FILE):
+    def load_best(self, track_name):
+        if track_name == "forest":
+            save_file = SAVE_FILE_FOREST
+        else:
+            save_file = SAVE_FILE_CITY
+
+        if os.path.exists(save_file):
             try:
-                with open(SAVE_FILE, "r", encoding="utf-8") as f:
+                with open(save_file, "r", encoding="utf-8") as f:
                     return json.load(f).get("best_time")
             except:
                 pass
         return None
 
     def save_best(self, current):
-        best = self.load_best()
+        if self.current_track == "forest":
+            save_file = SAVE_FILE_FOREST
+        else:
+            save_file = SAVE_FILE_CITY
+
+        best = self.load_best(self.current_track)
         if best is None or current < best:
-            with open(SAVE_FILE, "w", encoding="utf-8") as f:
+            with open(save_file, "w", encoding="utf-8") as f:
                 json.dump({"best_time": current}, f, ensure_ascii=False)
             return True
         return False
@@ -526,7 +811,7 @@ class RacingGame:
             bg="#1a1a2e"
         ).pack(pady=20)
 
-        best = self.load_best()
+        best = self.load_best(self.current_track)
         if best:
             if victory and race_time < best:
                 tk.Label(
@@ -539,7 +824,7 @@ class RacingGame:
             else:
                 tk.Label(
                     center_frame,
-                    text=f"Рекорд: {best:.2f} сек",
+                    text=f"Рекорд трассы: {best:.2f} сек",
                     font=("Arial", 28),
                     fg="#FFD700",
                     bg="#1a1a2e"
@@ -570,41 +855,40 @@ class RacingGame:
         finish_window.bind("<Escape>", lambda e: self.exit_to_menu_from_window(finish_window))
         finish_window.focus_set()
 
-    def check_finish(self):
-        """Проверка достижения Y = 100 - ФИНИШ"""
-        if self.finished or not self.race_started:
+    def check_finish_by_distance(self):
+        """Проверка достижения финиша"""
+        if self.finished or not self.race_started or self.finish_triggered:
             return
 
-        player_coords = self.get_car_coords(self.player)
-        enemy_coords = self.get_car_coords(self.enemy)
+        # Проверяем для игрока
+        player_remaining = self.total_distance - self.player_distance
+        # Проверяем для противника
+        enemy_remaining = self.total_distance - self.enemy_distance
 
-        player_finished = False
-        enemy_finished = False
-
-        if player_coords and player_coords[1] <= self.finish_line_y:
-            player_finished = True
-
-        if enemy_coords and enemy_coords[1] <= self.finish_line_y:
-            enemy_finished = True
-
-        if player_finished or enemy_finished:
+        # Если кто-то достиг финиша
+        if player_remaining <= -10 or enemy_remaining <= -10:
+            self.finish_triggered = True
             self.finished = True
             self.race_started = False
-            self.finish_time = time.time() - self.start_time
             self.game_speed = 0
+            self.enemy_speed = 0
+            self.finish_time = time.time() - self.start_time
 
-            if player_finished and not enemy_finished:
+            # Определяем победителя по дистанции
+            if self.player_distance >= self.total_distance and self.enemy_distance >= self.total_distance:
+                if self.player_distance > self.enemy_distance:
+                    self.save_best(self.finish_time)
+                    self.show_finish_window(True, self.finish_time)
+                else:
+                    self.show_finish_window(False, self.finish_time)
+            elif self.player_distance >= self.total_distance:
                 self.save_best(self.finish_time)
                 self.show_finish_window(True, self.finish_time)
-            elif enemy_finished and not player_finished:
+            elif self.enemy_distance >= self.total_distance:
                 self.show_finish_window(False, self.finish_time)
             else:
-                if player_coords and enemy_coords:
-                    if player_coords[1] <= enemy_coords[1]:
-                        self.save_best(self.finish_time)
-                        self.show_finish_window(True, self.finish_time)
-                    else:
-                        self.show_finish_window(False, self.finish_time)
+                self.save_best(self.finish_time)
+                self.show_finish_window(True, self.finish_time)
 
     def show_game_over_window(self):
         game_over_window = tk.Toplevel(self.root)
@@ -664,6 +948,9 @@ class RacingGame:
         window.destroy()
         self.game_over = False
         self.finished = False
+        self.finish_triggered = False
+        self.enemy_target_lane = 4
+        self.ai_decision_timer = 0
 
         if hasattr(self, 'game_frame'):
             self.game_frame.destroy()
@@ -674,6 +961,7 @@ class RacingGame:
         window.destroy()
         self.game_over = False
         self.finished = False
+        self.finish_triggered = False
 
         if hasattr(self, 'game_frame'):
             self.game_frame.destroy()
@@ -684,7 +972,7 @@ class RacingGame:
     def key_press(self, event):
         key = event.keysym
 
-        if self.race_started and not self.game_over and not self.finished:
+        if hasattr(self, 'race_started') and self.race_started and not self.game_over and not self.finished:
             if key == 'Up':
                 self.key_up = True
             elif key == 'Down':
@@ -707,12 +995,13 @@ class RacingGame:
             self.key_right = False
 
     def pause(self, event=None):
-        if self.race_started and not self.game_over and not self.finished:
+        if hasattr(self, 'race_started') and self.race_started and not self.game_over and not self.finished:
             self.paused = not self.paused
 
     def exit_to_menu(self):
         self.game_over = True
         self.finished = True
+        self.finish_triggered = True
 
         self.root.unbind("<KeyPress>")
         self.root.unbind("<KeyRelease>")
@@ -731,13 +1020,13 @@ class RacingGame:
 
         if not self.paused:
 
-            # Управление скоростью
+            # Управление скоростью игрока
             if self.key_up:
                 self.game_speed = min(15, self.game_speed + 0.2)
             if self.key_down:
                 self.game_speed = max(2, self.game_speed - 0.2)
 
-            # Управление поворотами
+            # Управление поворотами игрока
             if self.key_left and self.player_position_index > 0:
                 self.player_position_index -= 1
                 self.move_car_to_position(self.player, self.player_position_index)
@@ -747,84 +1036,130 @@ class RacingGame:
                 self.move_car_to_position(self.player, self.player_position_index)
                 self.root.after(80, lambda: None)
 
+            # Увеличение скорости противника каждую секунду
+            current_time = time.time()
+            if current_time - self.last_speed_increase_time >= 1.0:
+                if self.key_up:
+                    self.enemy_speed = min(15, self.enemy_speed + 1.0)
+                else:
+                    self.enemy_speed = min(15, self.enemy_speed + 0.833)
+                self.last_speed_increase_time = current_time
+
             # Обновление расстояния
-            self.player_distance += self.game_speed
-            self.enemy_distance += self.game_speed
+            if not self.finished:
+                self.player_distance += self.game_speed
+                self.enemy_distance += self.enemy_speed
 
             # Движение линий разметки
+            scroll_speed = (self.game_speed + self.enemy_speed) / 2
             for line in self.lines:
-                self.canvas.move(line, 0, self.game_speed)
+                self.canvas.move(line, 0, scroll_speed)
                 coords = self.canvas.coords(line)
                 if coords and coords[1] > HEIGHT:
                     self.canvas.coords(line, ROAD_CENTER - 5, -80, ROAD_CENTER + 5, -40)
 
+            # Движение городских зданий
+            if hasattr(self, 'buildings'):
+                for building in self.buildings:
+                    self.canvas.move(building["id"], 0, scroll_speed)
+                    for window in building["windows"]:
+                        self.canvas.move(window, 0, scroll_speed)
+
+                    building["y"] += scroll_speed
+
+                    coords = self.canvas.coords(building["id"])
+                    if coords and coords[1] > HEIGHT + 300:
+                        new_y = -building["height"] - random.randint(0, 500)
+                        dy = new_y - building["y"]
+                        self.canvas.move(building["id"], 0, dy)
+                        for window in building["windows"]:
+                            self.canvas.move(window, 0, dy)
+                        building["y"] = new_y
+
             # Движение препятствий
             for obs in self.obstacles[:]:
-                self.canvas.move(obs["id"], 0, self.game_speed)
-                obs["y"] += self.game_speed
+                self.canvas.move(obs["id"], 0, scroll_speed)
+                obs["y"] += scroll_speed
 
                 if obs["y"] > HEIGHT + 200:
                     self.canvas.delete(obs["id"])
                     self.obstacles.remove(obs)
 
             # Движение противника
+            if self.enemy:
+                self.move_car(self.enemy, 0, self.enemy_speed)
+
+            # Обновление ИИ противника
             self.update_enemy_ai()
 
-            # Проверка столкновения
-            if self.check_collision(self.player, self.obstacles):
+            # Проверка столкновений
+            if self.check_collision(self.enemy, self.obstacles):
+                self.finish_triggered = True
+                self.finished = True
+                self.race_started = False
+                self.game_speed = 0
+                self.enemy_speed = 0
+                self.finish_time = time.time() - self.start_time
+                self.save_best(self.finish_time)
+                self.show_finish_window(True, self.finish_time)
+                return
+
+            if not self.finished and self.check_collision(self.player, self.obstacles):
                 self.game_over = True
                 self.race_started = False
                 self.show_game_over_window()
                 return
 
-            # Появление финишной линии
-            remaining = self.total_distance - self.player_distance
+            # Финишная линия
+            remaining = self.total_distance - max(self.player_distance, self.enemy_distance)
             if remaining <= 500 and not self.finish_visible:
                 self.spawn_finish_line()
 
-            # Движение финишной линии
-            if self.finish_visible and self.finish_line:
+            if not self.finished and self.finish_visible and self.finish_line:
                 for item in self.finish_line:
-                    self.canvas.move(item, 0, self.game_speed)
+                    self.canvas.move(item, 0, scroll_speed)
 
-            # Проверка финиша
-            self.check_finish()
+            self.check_finish_by_distance()
 
             # Обновление UI
-            player_coords = self.get_car_coords(self.player)
-            enemy_coords = self.get_car_coords(self.enemy)
+            if not self.finished:
+                race_time = time.time() - self.start_time
+                speed_kmh = int(self.game_speed * 12)
+                best = self.load_best(self.current_track)
+                remaining_m = max(-10, int((self.total_distance - max(self.player_distance, self.enemy_distance)) / 10))
 
-            if player_coords and enemy_coords:
-                if player_coords[1] < enemy_coords[1]:
+                # Определяем место по пройденной дистанции
+                if self.player_distance > self.enemy_distance:
                     place = "1/2"
                     place_color = "#00FF00"
                 else:
                     place = "2/2"
                     place_color = "#FFA500"
-            else:
-                place = "?/2"
-                place_color = "#FFFFFF"
 
-            race_time = time.time() - self.start_time
-            speed_kmh = int(self.game_speed * 12)
-            best = self.load_best()
-            remaining_m = int((self.total_distance - self.player_distance) / 10)
+                txt = f"МЕСТО: {place}   |   ВРЕМЯ: {race_time:.2f} сек   |   СКОРОСТЬ: {speed_kmh} км/ч   |   ДО ФИНИША: {remaining_m} м"
+                if best:
+                    txt += f"   |   РЕКОРД: {best:.2f} сек"
 
-            txt = f"МЕСТО: {place}   |   ВРЕМЯ: {race_time:.2f} сек   |   СКОРОСТЬ: {speed_kmh} км/ч   |   ДО ФИНИША: {remaining_m} м"
-            if best:
-                txt += f"   |   РЕКОРД: {best:.2f} сек"
+                self.info.config(text=txt, fg=place_color)
 
-            self.info.config(text=txt, fg=place_color)
+                # Прогресс-бары
+                self.canvas.delete("progress")
+                progress_width = 400
+                player_progress = min(1.0, self.player_distance / self.total_distance)
+                enemy_progress = min(1.0, self.enemy_distance / self.total_distance)
+                bar_x = WIDTH // 2 - progress_width // 2
 
-            # Прогресс-бар
-            self.canvas.delete("progress")
-            progress_width = 400
-            progress = min(1.0, self.player_distance / self.total_distance)
-            bar_x = WIDTH // 2 - progress_width // 2
-            self.canvas.create_rectangle(bar_x, 20, bar_x + progress_width, 35, fill="#444", outline="white",
-                                         tags="progress")
-            self.canvas.create_rectangle(bar_x, 20, bar_x + progress_width * progress, 35, fill="#00FF00", outline="",
-                                         tags="progress")
+                # Прогресс игрока (синий)
+                self.canvas.create_rectangle(bar_x, 20, bar_x + progress_width, 35, fill="#444", outline="white",
+                                             tags="progress")
+                self.canvas.create_rectangle(bar_x, 20, bar_x + progress_width * player_progress, 35, fill="#3366FF",
+                                             outline="", tags="progress")
+
+                # Прогресс противника (оранжевый)
+                self.canvas.create_rectangle(bar_x, 40, bar_x + progress_width, 55, fill="#444", outline="white",
+                                             tags="progress")
+                self.canvas.create_rectangle(bar_x, 40, bar_x + progress_width * enemy_progress, 55, fill="#FF6600",
+                                             outline="", tags="progress")
 
         self.root.after(16, self.update)
 
