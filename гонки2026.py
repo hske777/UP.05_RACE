@@ -671,7 +671,7 @@ class RacingGame:
 
     def show_finish_window(self, race_time, is_new_record=False):
         finish_window = tk.Toplevel(self.root)
-        finish_window.title("Победа!")
+        finish_window.title("Финиш!")
         finish_window.geometry(f"{WIDTH}x{HEIGHT}")
         finish_window.state("zoomed")
         finish_window.configure(bg="#1a1a2e")
@@ -715,6 +715,14 @@ class RacingGame:
                     fg="#FFD700",
                     bg="#1a1a2e"
                 ).pack(pady=20)
+        else:
+            tk.Label(
+                center_frame,
+                text="★ НОВЫЙ РЕКОРД! ★",
+                font=("Arial", 36, "bold"),
+                fg="#FFD700",
+                bg="#1a1a2e"
+            ).pack(pady=20)
 
         tk.Button(
             center_frame,
@@ -761,7 +769,7 @@ class RacingGame:
 
     def show_game_over_window(self):
         game_over_window = tk.Toplevel(self.root)
-        game_over_window.title("Поражение")
+        game_over_window.title("Авария")
         game_over_window.geometry(f"{WIDTH}x{HEIGHT}")
         game_over_window.state("zoomed")
         game_over_window.configure(bg="#1a1a2e")
