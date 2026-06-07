@@ -6,78 +6,153 @@ import json
 import os
 import math
 
-WIDTH = 1920
-HEIGHT = 1080
-
-ROAD_LEFT = 760
-ROAD_RIGHT = 1160
-ROAD_CENTER = (ROAD_LEFT + ROAD_RIGHT) // 2
-
-# ФИКСИРОВАННЫЕ ПОЗИЦИИ ПОЛОС
-LANE_POSITIONS = [
-    ROAD_LEFT + 50,  # 0 - крайняя левая
-    ROAD_LEFT + 150,  # 1 - левая
-    ROAD_CENTER - 50,  # 2 - левая центральная
-    ROAD_CENTER + 50,  # 3 - правая центральная
-    ROAD_RIGHT - 150,  # 4 - правая
-    ROAD_RIGHT - 50  # 5 - крайняя правая
-]
-
-# ФИКСИРОВАННЫЕ ПРЕПЯТСТВИЯ ДЛЯ ЛЕСНОЙ ТРАССЫ
-FOREST_OBSTACLES = [
-    (1, -500, "tree"), (2, -800, "rock"), (4, -1200, "tree"),
-    (0, -1600, "rock"), (3, -2000, "tree"), (5, -2500, "block"),
-    (2, -3000, "tree"), (4, -3500, "rock"), (1, -4000, "tree"),
-    (3, -4500, "block"), (0, -5000, "tree"), (5, -5500, "rock"),
-]
-
-# ФИКСИРОВАННЫЕ ПРЕПЯТСТВИЯ ДЛЯ ГОРОДСКОЙ ТРАССЫ
-CITY_OBSTACLES = [
-    (2, -400, "cone"), (4, -700, "cone"), (1, -1100, "box"),
-    (3, -1500, "cone"), (0, -1900, "box"), (5, -2300, "cone"),
-    (2, -2700, "box"), (4, -3100, "cone"), (1, -3500, "box"),
-    (3, -3900, "cone"), (5, -4300, "box"), (0, -4700, "cone"),
-    (2, -5100, "box"), (4, -5500, "cone"), (1, -5900, "box"),
-]
-
-SAVE_FILE_FOREST = "record_forest.json"
-SAVE_FILE_CITY = "record_city.json"
-
 
 class RacingGame:
     def __init__(self, root):
         self.root = root
         self.root.title("Гонки")
-        self.root.geometry(f"{WIDTH}x{HEIGHT}")
+
+        # Получаем размер экрана
+        self.screen_width = self.root.winfo_screenwidth()
+        self.screen_height = self.root.winfo_screenheight()
+
+        # Устанавливаем окно на весь экран
+        self.root.geometry(f"{self.screen_width}x{self.screen_height}")
         self.root.state("zoomed")
+
+        # Пропорциональные размеры (относительно базового разрешения 1920x1080)
+        self.base_width = 1920
+        self.base_height = 1080
+
+        # Коэффициенты масштабирования
+        self.scale_x = self.screen_width / self.base_width
+        self.scale_y = self.screen_height / self.base_height
+
+        # Масштабируем все координаты
+        self.WIDTH = self.screen_width
+        self.HEIGHT = self.screen_height
+
+        # Масштабируем дорогу
+        self.ROAD_LEFT = int(760 * self.scale_x)
+        self.ROAD_RIGHT = int(1160 * self.scale_x)
+        self.ROAD_CENTER = (self.ROAD_LEFT + self.ROAD_RIGHT) // 2
+
+        # Масштабируем позиции полос
+        self.LANE_POSITIONS = [
+            self.ROAD_LEFT + int(50 * self.scale_x),
+            self.ROAD_LEFT + int(150 * self.scale_x),
+            self.ROAD_CENTER - int(50 * self.scale_x),
+            self.ROAD_CENTER + int(50 * self.scale_x),
+            self.ROAD_RIGHT - int(150 * self.scale_x),
+            self.ROAD_RIGHT - int(50 * self.scale_x)
+        ]
+
+        # Масштабируем фиксированные препятствия
+        self.FOREST_OBSTACLES = self.scale_obstacles([
+            (1, -500, "tree"), (2, -800, "rock"), (4, -1200, "tree"),
+            (0, -1600, "rock"), (3, -2000, "tree"), (5, -2500, "block"),
+            (2, -3000, "tree"), (4, -3500, "rock"), (1, -4000, "tree"),
+            (3, -4500, "block"), (0, -5000, "tree"), (5, -5500, "rock"),
+        ])
+
+        self.CITY_OBSTACLES = self.scale_obstacles([
+            (2, -400, "cone"), (4, -700, "cone"), (1, -1100, "box"),
+            (3, -1500, "cone"), (0, -1900, "box"), (5, -2300, "cone"),
+            (2, -2700, "box"), (4, -3100, "cone"), (1, -3500, "box"),
+            (3, -3900, "cone"), (5, -4300, "box"), (0, -4700, "cone"),
+            (2, -5100, "box"), (4, -5500, "cone"), (1, -5900, "box"),
+        ])
+
+        self.SAVE_FILE_FOREST = "record_forest.json"
+        self.SAVE_FILE_CITY = "record_city.json"
 
         self.current_track = None
         self.menu_frame = tk.Frame(root, bg="black")
         self.menu_frame.pack(fill="both", expand=True)
 
+        # Обновляем bind для изменения размера окна
+        self.root.bind("<Configure>", self.on_window_resize)
+
         self.show_menu()
+
+    def scale_obstacles(self, obstacles):
+        """Масштабирует координаты препятствий"""
+        scaled = []
+        for lane, y_pos, obs_type in obstacles:
+            scaled_y = int(y_pos * self.scale_y)
+            scaled.append((lane, scaled_y, obs_type))
+        return scaled
+
+    def scale_finish_line_y(self):
+        """Масштабирует позицию финишной линии"""
+        return int(100 * self.scale_y)
+
+    def on_window_resize(self, event):
+        """Обработчик изменения размера окна"""
+        if event.widget == self.root:
+            # Обновляем размеры
+            self.WIDTH = event.width
+            self.HEIGHT = event.height
+            self.scale_x = self.WIDTH / self.base_width
+            self.scale_y = self.HEIGHT / self.base_height
+
+            # Пересчитываем координаты дороги
+            self.ROAD_LEFT = int(760 * self.scale_x)
+            self.ROAD_RIGHT = int(1160 * self.scale_x)
+            self.ROAD_CENTER = (self.ROAD_LEFT + self.ROAD_RIGHT) // 2
+
+            # Пересчитываем позиции полос
+            self.LANE_POSITIONS = [
+                self.ROAD_LEFT + int(50 * self.scale_x),
+                self.ROAD_LEFT + int(150 * self.scale_x),
+                self.ROAD_CENTER - int(50 * self.scale_x),
+                self.ROAD_CENTER + int(50 * self.scale_x),
+                self.ROAD_RIGHT - int(150 * self.scale_x),
+                self.ROAD_RIGHT - int(50 * self.scale_x)
+            ]
+
+            # Пересоздаем игру, если она запущена
+            if hasattr(self, 'race_started') and self.race_started:
+                self.restart_game_on_resize()
+
+    def restart_game_on_resize(self):
+        """Перезапускает игру при изменении размера окна"""
+        if hasattr(self, 'game_frame') and self.game_frame.winfo_exists():
+            self.game_over = True
+            self.finished = True
+            if hasattr(self, 'game_frame'):
+                self.game_frame.destroy()
+            self.start_game()
 
     def show_menu(self):
         for w in self.menu_frame.winfo_children():
             w.destroy()
 
-        menu_canvas = tk.Canvas(self.menu_frame, width=WIDTH, height=HEIGHT, bg="black", highlightthickness=0)
+        menu_canvas = tk.Canvas(self.menu_frame, width=self.WIDTH, height=self.HEIGHT, bg="black", highlightthickness=0)
         menu_canvas.pack(fill="both", expand=True)
 
+        # Масштабируем размеры шрифтов и отступов
+        title_font_size = int(80 * min(self.scale_x, self.scale_y))
+        btn_font_size = int(24 * min(self.scale_x, self.scale_y))
+        text_font_size = int(20 * min(self.scale_x, self.scale_y))
+
         menu_canvas.create_text(
-            WIDTH // 2, 200,
+            self.WIDTH // 2, int(200 * self.scale_y),
             text="ГОНКИ",
-            font=("Arial", 80, "bold"),
+            font=("Arial", title_font_size, "bold"),
             fill="red"
         )
 
+        btn_width = int(300 * self.scale_x)
+        btn_height = int(60 * self.scale_y)
+
         btn_bg = tk.Frame(self.menu_frame, bg="black")
-        btn_bg.place(x=WIDTH // 2 - 150, y=400, width=300, height=60)
+        btn_bg.place(x=self.WIDTH // 2 - btn_width // 2, y=int(400 * self.scale_y), width=btn_width, height=btn_height)
 
         select_btn = tk.Button(
             btn_bg,
             text="ВЫБОР ТРАССЫ",
-            font=("Arial", 24, "bold"),
+            font=("Arial", btn_font_size, "bold"),
             bg="blue",
             fg="white",
             cursor="hand2",
@@ -86,12 +161,12 @@ class RacingGame:
         select_btn.pack(fill="both", expand=True)
 
         btn_bg2 = tk.Frame(self.menu_frame, bg="black")
-        btn_bg2.place(x=WIDTH // 2 - 150, y=490, width=300, height=60)
+        btn_bg2.place(x=self.WIDTH // 2 - btn_width // 2, y=int(490 * self.scale_y), width=btn_width, height=btn_height)
 
         exit_btn = tk.Button(
             btn_bg2,
             text="ВЫХОД",
-            font=("Arial", 24, "bold"),
+            font=("Arial", btn_font_size, "bold"),
             bg="red",
             fg="white",
             cursor="hand2",
@@ -100,15 +175,16 @@ class RacingGame:
         exit_btn.pack(fill="both", expand=True)
 
         menu_canvas.create_text(
-            WIDTH // 2, 600,
+            self.WIDTH // 2, int(600 * self.scale_y),
             text="Управление: ↑/↓ - скорость | ←/→ - поворот | ESC - выход в главное меню",
-            font=("Arial", 20),
+            font=("Arial", text_font_size),
             fill="gray"
         )
 
+        # Звездное небо
         for _ in range(100):
-            x = random.randint(0, WIDTH)
-            y = random.randint(0, HEIGHT)
+            x = random.randint(0, self.WIDTH)
+            y = random.randint(0, self.HEIGHT)
             menu_canvas.create_oval(x, y, x + 2, y + 2, fill="white", outline="")
 
     def show_track_selection(self):
@@ -116,101 +192,110 @@ class RacingGame:
 
         self.track_window = tk.Toplevel(self.root)
         self.track_window.title("Выбор трассы")
-        self.track_window.geometry(f"{WIDTH}x{HEIGHT}")
+        self.track_window.geometry(f"{self.WIDTH}x{self.HEIGHT}")
         self.track_window.state("zoomed")
         self.track_window.configure(bg="black")
         self.track_window.transient(self.root)
         self.track_window.grab_set()
 
-        track_canvas = tk.Canvas(self.track_window, width=WIDTH, height=HEIGHT, bg="black", highlightthickness=0)
+        track_canvas = tk.Canvas(self.track_window, width=self.WIDTH, height=self.HEIGHT, bg="black",
+                                 highlightthickness=0)
         track_canvas.pack(fill="both", expand=True)
 
+        # Звездное небо
         for _ in range(100):
-            x = random.randint(0, WIDTH)
-            y = random.randint(0, HEIGHT)
+            x = random.randint(0, self.WIDTH)
+            y = random.randint(0, self.HEIGHT)
             track_canvas.create_oval(x, y, x + 2, y + 2, fill="white", outline="")
 
+        title_font_size = int(60 * min(self.scale_x, self.scale_y))
         track_canvas.create_text(
-            WIDTH // 2, 150,
+            self.WIDTH // 2, int(150 * self.scale_y),
             text="ВЫБОР ТРАССЫ",
-            font=("Arial", 60, "bold"),
+            font=("Arial", title_font_size, "bold"),
             fill="yellow"
         )
 
         # Лесная трасса
-        forest_x = WIDTH // 2 - 550
-        forest_y = 300
-        forest_width = 500
-        forest_height = 450
+        forest_width = int(500 * self.scale_x)
+        forest_height = int(450 * self.scale_y)
+        forest_x = self.WIDTH // 2 - forest_width - int(50 * self.scale_x)
+        forest_y = int(300 * self.scale_y)
 
         track_canvas.create_rectangle(
             forest_x, forest_y, forest_x + forest_width, forest_y + forest_height,
-            fill="#228B22", outline="white", width=5
+            fill="#228B22", outline="white", width=int(5 * min(self.scale_x, self.scale_y))
         )
 
+        emoji_font_size = int(100 * min(self.scale_x, self.scale_y))
         track_canvas.create_text(
-            forest_x + forest_width // 2, forest_y + 150,
+            forest_x + forest_width // 2, forest_y + int(150 * self.scale_y),
             text="🌲",
-            font=("Arial", 100)
+            font=("Arial", emoji_font_size)
         )
 
+        track_font_size = int(28 * min(self.scale_x, self.scale_y))
         track_canvas.create_text(
-            forest_x + forest_width // 2, forest_y + 250,
+            forest_x + forest_width // 2, forest_y + int(250 * self.scale_y),
             text="ЛЕСНАЯ ТРАССА",
-            font=("Arial", 28, "bold"),
+            font=("Arial", track_font_size, "bold"),
             fill="white"
         )
 
         # Рекорд лесной трассы
+        record_font_size = int(20 * min(self.scale_x, self.scale_y))
         forest_best = self.load_best("forest")
         if forest_best:
             track_canvas.create_text(
-                forest_x + forest_width // 2, forest_y + 320,
+                forest_x + forest_width // 2, forest_y + int(320 * self.scale_y),
                 text=f"Рекорд: {forest_best:.2f} сек",
-                font=("Arial", 20),
+                font=("Arial", record_font_size),
                 fill="#FFD700"
             )
         else:
             track_canvas.create_text(
-                forest_x + forest_width // 2, forest_y + 320,
+                forest_x + forest_width // 2, forest_y + int(320 * self.scale_y),
                 text="Рекорд: ---",
-                font=("Arial", 20),
+                font=("Arial", record_font_size),
                 fill="#FFD700"
             )
 
+        btn_width = int(200 * self.scale_x)
+        btn_height = int(50 * self.scale_y)
         select_btn_forest = tk.Button(
             self.track_window,
             text="ВЫБРАТЬ",
-            font=("Arial", 24, "bold"),
+            font=("Arial", int(24 * min(self.scale_x, self.scale_y)), "bold"),
             bg="green",
             fg="white",
-            width=15,
             cursor="hand2",
             command=lambda: self.select_track("forest")
         )
-        select_btn_forest.place(x=forest_x + 150, y=forest_y + 370, width=200, height=50)
+        select_btn_forest.place(x=forest_x + forest_width // 2 - btn_width // 2,
+                                y=forest_y + int(370 * self.scale_y),
+                                width=btn_width, height=btn_height)
 
         # Городская трасса
-        city_x = WIDTH // 2 + 50
-        city_y = 300
-        city_width = 500
-        city_height = 450
+        city_width = int(500 * self.scale_x)
+        city_height = int(450 * self.scale_y)
+        city_x = self.WIDTH // 2 + int(50 * self.scale_x)
+        city_y = int(300 * self.scale_y)
 
         track_canvas.create_rectangle(
             city_x, city_y, city_x + city_width, city_y + city_height,
-            fill="#808080", outline="white", width=5
+            fill="#808080", outline="white", width=int(5 * min(self.scale_x, self.scale_y))
         )
 
         track_canvas.create_text(
-            city_x + city_width // 2, city_y + 150,
+            city_x + city_width // 2, city_y + int(150 * self.scale_y),
             text="🏙️",
-            font=("Arial", 100)
+            font=("Arial", emoji_font_size)
         )
 
         track_canvas.create_text(
-            city_x + city_width // 2, city_y + 250,
+            city_x + city_width // 2, city_y + int(250 * self.scale_y),
             text="ГОРОДСКАЯ ТРАССА",
-            font=("Arial", 28, "bold"),
+            font=("Arial", track_font_size, "bold"),
             fill="white"
         )
 
@@ -218,42 +303,46 @@ class RacingGame:
         city_best = self.load_best("city")
         if city_best:
             track_canvas.create_text(
-                city_x + city_width // 2, city_y + 320,
+                city_x + city_width // 2, city_y + int(320 * self.scale_y),
                 text=f"Рекорд: {city_best:.2f} сек",
-                font=("Arial", 20),
+                font=("Arial", record_font_size),
                 fill="#FFD700"
             )
         else:
             track_canvas.create_text(
-                city_x + city_width // 2, city_y + 320,
+                city_x + city_width // 2, city_y + int(320 * self.scale_y),
                 text="Рекорд: ---",
-                font=("Arial", 20),
+                font=("Arial", record_font_size),
                 fill="#FFD700"
             )
 
         select_btn_city = tk.Button(
             self.track_window,
             text="ВЫБРАТЬ",
-            font=("Arial", 24, "bold"),
+            font=("Arial", int(24 * min(self.scale_x, self.scale_y)), "bold"),
             bg="blue",
             fg="white",
-            width=15,
             cursor="hand2",
             command=lambda: self.select_track("city")
         )
-        select_btn_city.place(x=city_x + 150, y=city_y + 370, width=200, height=50)
+        select_btn_city.place(x=city_x + city_width // 2 - btn_width // 2,
+                              y=city_y + int(370 * self.scale_y),
+                              width=btn_width, height=btn_height)
 
+        menu_btn_width = int(300 * self.scale_x)
+        menu_btn_height = int(60 * self.scale_y)
         menu_btn = tk.Button(
             self.track_window,
             text="ГЛАВНОЕ МЕНЮ",
-            font=("Arial", 24, "bold"),
+            font=("Arial", int(24 * min(self.scale_x, self.scale_y)), "bold"),
             bg="orange",
             fg="white",
-            width=15,
             cursor="hand2",
             command=self.back_to_menu
         )
-        menu_btn.place(x=WIDTH // 2 - 150, y=800, width=300, height=60)
+        menu_btn.place(x=self.WIDTH // 2 - menu_btn_width // 2,
+                       y=int(800 * self.scale_y),
+                       width=menu_btn_width, height=menu_btn_height)
 
         self.track_window.bind("<Escape>", lambda e: self.back_to_menu())
         self.track_window.focus_set()
@@ -276,21 +365,22 @@ class RacingGame:
         self.game_frame = tk.Frame(self.root)
         self.game_frame.pack(fill="both", expand=True)
 
-        self.info = tk.Label(self.game_frame, font=("Arial", 18), bg="black", fg="white")
+        info_font_size = int(18 * min(self.scale_x, self.scale_y))
+        self.info = tk.Label(self.game_frame, font=("Arial", info_font_size), bg="black", fg="white")
         self.info.pack(fill="x")
 
         # Выбор цвета фона в зависимости от трассы
         if self.current_track == "forest":
-            bg_color = "#1a3a1a"  # Темно-зеленый для лесной трассы
+            bg_color = "#1a3a1a"
         elif self.current_track == "city":
-            bg_color = "#2a2a3a"  # Темно-синий/серый для городской трассы
+            bg_color = "#2a2a3a"
         else:
-            bg_color = "#1a1a2e"  # Стандартный цвет
+            bg_color = "#1a1a2e"
 
         self.canvas = tk.Canvas(
             self.game_frame,
-            width=WIDTH,
-            height=HEIGHT - 50,
+            width=self.WIDTH,
+            height=self.HEIGHT - int(50 * self.scale_y),
             bg=bg_color
         )
         self.canvas.pack()
@@ -300,11 +390,11 @@ class RacingGame:
         self.finished = False
         self.race_started = False
 
-        self.game_speed = 5  # начальная скорость игрока
+        self.game_speed = 5
         self.player_position_index = 2
 
         self.player_distance = 0
-        self.total_distance = 7000
+        self.total_distance = int(7000 * self.scale_y)
 
         self.key_up = False
         self.key_down = False
@@ -319,33 +409,34 @@ class RacingGame:
         self.draw_road()
 
         # Y-ПОЗИЦИЯ ДЛЯ МАШИНЫ
-        player_y_position = HEIGHT - 150
+        player_y_position = self.HEIGHT - int(150 * self.scale_y)
 
-        self.player = self.create_car(LANE_POSITIONS[self.player_position_index], player_y_position, "#3366FF")
+        self.player = self.create_car(self.LANE_POSITIONS[self.player_position_index], player_y_position, "#3366FF")
 
         self.obstacles = []
         if self.current_track == "forest":
-            for lane, y_pos, obs_type in FOREST_OBSTACLES:
+            for lane, y_pos, obs_type in self.FOREST_OBSTACLES:
                 self.spawn_fixed_obstacle(lane, y_pos, obs_type)
         elif self.current_track == "city":
-            for lane, y_pos, obs_type in CITY_OBSTACLES:
+            for lane, y_pos, obs_type in self.CITY_OBSTACLES:
                 self.spawn_fixed_obstacle(lane, y_pos, obs_type)
 
-        # Добавляем городские декорации (здания) для городской трассы
+        # Добавляем городские декорации для городской трассы
         self.buildings = []
         if self.current_track == "city":
             self.spawn_city_buildings()
 
         self.lines = []
-        for y in range(0, HEIGHT + 200, 80):
+        line_spacing = int(80 * self.scale_y)
+        for y in range(0, self.HEIGHT + int(200 * self.scale_y), line_spacing):
             line = self.canvas.create_rectangle(
-                ROAD_CENTER - 5, y,
-                ROAD_CENTER + 5, y + 40,
+                self.ROAD_CENTER - int(5 * self.scale_x), y,
+                self.ROAD_CENTER + int(5 * self.scale_x), y + int(40 * self.scale_y),
                 fill="white"
             )
             self.lines.append(line)
 
-        self.finish_line_y = 100
+        self.finish_line_y = self.scale_finish_line_y()
         self.finish_line = None
         self.finish_visible = False
         self.finish_triggered = False
@@ -362,69 +453,63 @@ class RacingGame:
     def check_building_collision(self, x, y, width, height, existing_buildings, side):
         """Проверяет, не пересекается ли новое здание с существующими"""
         for building in existing_buildings:
-            # Проверяем пересечение прямоугольников
-            if (x < building["x"] + building["width"] + 20 and
-                    x + width + 20 > building["x"] and
-                    y < building["y"] + building["height"] + 30 and
-                    y + height + 30 > building["y"]):
+            if (x < building["x"] + building["width"] + int(20 * self.scale_x) and
+                    x + width + int(20 * self.scale_x) > building["x"] and
+                    y < building["y"] + building["height"] + int(30 * self.scale_y) and
+                    y + height + int(30 * self.scale_y) > building["y"]):
                 return True
         return False
 
     def spawn_city_buildings(self):
         """Создает городские здания по бокам дороги на безопасном расстоянии"""
 
-        # Параметры отступов
-        left_area_start = 30  # Начало левой зоны
-        left_area_end = ROAD_LEFT - 60  # Конец левой зоны (отступ от дороги)
+        left_area_start = int(30 * self.scale_x)
+        left_area_end = self.ROAD_LEFT - int(60 * self.scale_x)
 
-        right_area_start = ROAD_RIGHT + 60  # Начало правой зоны (отступ от дороги)
-        right_area_end = WIDTH - 100  # Конец правой зоны
+        right_area_start = self.ROAD_RIGHT + int(60 * self.scale_x)
+        right_area_end = self.WIDTH - int(100 * self.scale_x)
 
         left_buildings = []
         right_buildings = []
 
+        building_count = int(12 * min(self.scale_x, self.scale_y))
+
         # Генерируем здания слева
-        for i in range(12):
+        for i in range(building_count):
             max_attempts = 50
             for attempt in range(max_attempts):
-                width = random.randint(70, 140)
-                height = random.randint(130, 250)
+                width = random.randint(int(70 * self.scale_x), int(140 * self.scale_x))
+                height = random.randint(int(130 * self.scale_y), int(250 * self.scale_y))
 
-                # X координата в безопасной зоне слева
                 x = random.randint(left_area_start, left_area_end - width)
+                y = random.randint(-self.HEIGHT, self.HEIGHT + int(500 * self.scale_y))
 
-                # Y координата (разбрасываем по всей высоте)
-                y = random.randint(-HEIGHT, HEIGHT + 500)
-
-                # Проверяем пересечение с другими зданиями слева
                 if not self.check_building_collision(x, y, width, height, left_buildings, "left"):
-                    # Создаем здание
                     building_color = random.choice(["#4a4a4a", "#5a5a5a", "#6a6a6a", "#3a3a3a", "#585858", "#707070"])
 
-                    # Основное здание
                     building = self.canvas.create_rectangle(
                         x, y, x + width, y + height,
                         fill=building_color,
                         outline="#888888",
-                        width=2,
+                        width=int(2 * min(self.scale_x, self.scale_y)),
                         tags="building"
                     )
 
-                    # Окна
                     windows = []
-                    window_size = 15
-                    window_spacing = 22
+                    window_size = int(15 * min(self.scale_x, self.scale_y))
+                    window_spacing = int(22 * min(self.scale_x, self.scale_y))
 
-                    for wx in range(x + 12, x + width - 12, window_spacing):
-                        for wy in range(y + 15, y + height - 15, window_spacing):
-                            # Пропускаем окна, которые могут вылезти за пределы
-                            if wx + window_size <= x + width - 5 and wy + window_size <= y + height - 5:
+                    for wx in range(x + int(12 * self.scale_x), x + width - int(12 * self.scale_x), window_spacing):
+                        for wy in range(y + int(15 * self.scale_y), y + height - int(15 * self.scale_y),
+                                        window_spacing):
+                            if wx + window_size <= x + width - int(
+                                    5 * self.scale_x) and wy + window_size <= y + height - int(5 * self.scale_y):
                                 window_color = random.choice(["#ffffaa", "#ffcc66", "#ffaa66", "#ffee88"])
                                 window = self.canvas.create_rectangle(
                                     wx, wy, wx + window_size, wy + window_size,
                                     fill=window_color,
                                     outline="#ccccaa",
-                                    width=1,
+                                    width=int(1 * min(self.scale_x, self.scale_y)),
                                     tags="building"
                                 )
                                 windows.append(window)
@@ -440,47 +525,41 @@ class RacingGame:
                     break
 
         # Генерируем здания справа
-        for i in range(12):
+        for i in range(building_count):
             max_attempts = 50
             for attempt in range(max_attempts):
-                width = random.randint(70, 140)
-                height = random.randint(130, 250)
+                width = random.randint(int(70 * self.scale_x), int(140 * self.scale_x))
+                height = random.randint(int(130 * self.scale_y), int(250 * self.scale_y))
 
-                # X координата в безопасной зоне справа
                 x = random.randint(right_area_start, right_area_end - width)
+                y = random.randint(-self.HEIGHT, self.HEIGHT + int(500 * self.scale_y))
 
-                # Y координата (разбрасываем по всей высоте)
-                y = random.randint(-HEIGHT, HEIGHT + 500)
-
-                # Проверяем пересечение с другими зданиями справа
                 if not self.check_building_collision(x, y, width, height, right_buildings, "right"):
-                    # Создаем здание
                     building_color = random.choice(["#4a4a4a", "#5a5a5a", "#6a6a6a", "#3a3a3a", "#585858", "#707070"])
 
-                    # Основное здание
                     building = self.canvas.create_rectangle(
                         x, y, x + width, y + height,
                         fill=building_color,
                         outline="#888888",
-                        width=2,
+                        width=int(2 * min(self.scale_x, self.scale_y)),
                         tags="building"
                     )
 
-                    # Окна
                     windows = []
-                    window_size = 15
-                    window_spacing = 22
+                    window_size = int(15 * min(self.scale_x, self.scale_y))
+                    window_spacing = int(22 * min(self.scale_x, self.scale_y))
 
-                    for wx in range(x + 12, x + width - 12, window_spacing):
-                        for wy in range(y + 15, y + height - 15, window_spacing):
-                            # Пропускаем окна, которые могут вылезти за пределы
-                            if wx + window_size <= x + width - 5 and wy + window_size <= y + height - 5:
+                    for wx in range(x + int(12 * self.scale_x), x + width - int(12 * self.scale_x), window_spacing):
+                        for wy in range(y + int(15 * self.scale_y), y + height - int(15 * self.scale_y),
+                                        window_spacing):
+                            if wx + window_size <= x + width - int(
+                                    5 * self.scale_x) and wy + window_size <= y + height - int(5 * self.scale_y):
                                 window_color = random.choice(["#ffffaa", "#ffcc66", "#ffaa66", "#ffee88"])
                                 window = self.canvas.create_rectangle(
                                     wx, wy, wx + window_size, wy + window_size,
                                     fill=window_color,
                                     outline="#ccccaa",
-                                    width=1,
+                                    width=int(1 * min(self.scale_x, self.scale_y)),
                                     tags="building"
                                 )
                                 windows.append(window)
@@ -495,16 +574,16 @@ class RacingGame:
                     })
                     break
 
-        # Объединяем оба списка
         self.buildings = left_buildings + right_buildings
 
     def countdown(self):
         self.countdown_value = 3
 
+        font_size = int(120 * min(self.scale_x, self.scale_y))
         self.countdown_text = self.canvas.create_text(
-            WIDTH // 2, HEIGHT // 2,
+            self.WIDTH // 2, self.HEIGHT // 2,
             text=str(self.countdown_value),
-            font=("Arial", 120, "bold"),
+            font=("Arial", font_size, "bold"),
             fill="yellow"
         )
 
@@ -522,19 +601,24 @@ class RacingGame:
             self.update()
 
     def create_car(self, x, y, color):
-        w, h = 50, 80
+        w = int(50 * self.scale_x)
+        h = int(80 * self.scale_y)
         car = self.canvas.create_rectangle(
             x - w // 2, y - h // 2,
             x + w // 2, y + h // 2,
-            fill=color, outline="white", width=2
+            fill=color, outline="white", width=int(2 * min(self.scale_x, self.scale_y))
         )
+        window_width = int(30 * self.scale_x)
+        window_height = int(25 * self.scale_y)
         window1 = self.canvas.create_rectangle(
-            x - 15, y - 20, x + 15, y + 5,
-            fill="#88CCFF", outline="white", width=1
+            x - window_width // 2, y - int(20 * self.scale_y),
+            x + window_width // 2, y + int(5 * self.scale_y),
+            fill="#88CCFF", outline="white", width=int(1 * min(self.scale_x, self.scale_y))
         )
         window2 = self.canvas.create_rectangle(
-            x - 15, y + 10, x + 15, y + 30,
-            fill="#88CCFF", outline="white", width=1
+            x - window_width // 2, y + int(10 * self.scale_y),
+            x + window_width // 2, y + int(30 * self.scale_y),
+            fill="#88CCFF", outline="white", width=int(1 * min(self.scale_x, self.scale_y))
         )
         return {"body": car, "window1": window1, "window2": window2, "x": x, "y": y}
 
@@ -546,7 +630,7 @@ class RacingGame:
         car["y"] += dy
 
     def move_car_to_position(self, car, position_index):
-        dx = LANE_POSITIONS[position_index] - car["x"]
+        dx = self.LANE_POSITIONS[position_index] - car["x"]
         if dx != 0:
             self.move_car(car, dx, 0)
 
@@ -554,49 +638,55 @@ class RacingGame:
         return self.canvas.coords(car["body"])
 
     def draw_road(self):
-        # Выбор цвета обочин в зависимости от трассы
         if self.current_track == "forest":
-            roadside_color = "#1a5c1a"  # Темно-зеленый для леса
+            roadside_color = "#1a5c1a"
         elif self.current_track == "city":
-            roadside_color = "#3a3a4a"  # Темно-серый для города
+            roadside_color = "#3a3a4a"
         else:
             roadside_color = "#228B22"
 
         self.canvas.create_rectangle(
-            ROAD_LEFT, 0, ROAD_RIGHT, HEIGHT,
+            self.ROAD_LEFT, 0, self.ROAD_RIGHT, self.HEIGHT,
             fill="#333333", outline=""
         )
-        self.canvas.create_line(ROAD_LEFT, 0, ROAD_LEFT, HEIGHT, fill="yellow", width=5)
-        self.canvas.create_line(ROAD_RIGHT, 0, ROAD_RIGHT, HEIGHT, fill="yellow", width=5)
-        self.canvas.create_rectangle(0, 0, ROAD_LEFT, HEIGHT, fill=roadside_color, outline="")
-        self.canvas.create_rectangle(ROAD_RIGHT, 0, WIDTH, HEIGHT, fill=roadside_color, outline="")
+        line_width = int(5 * min(self.scale_x, self.scale_y))
+        self.canvas.create_line(self.ROAD_LEFT, 0, self.ROAD_LEFT, self.HEIGHT, fill="yellow", width=line_width)
+        self.canvas.create_line(self.ROAD_RIGHT, 0, self.ROAD_RIGHT, self.HEIGHT, fill="yellow", width=line_width)
+        self.canvas.create_rectangle(0, 0, self.ROAD_LEFT, self.HEIGHT, fill=roadside_color, outline="")
+        self.canvas.create_rectangle(self.ROAD_RIGHT, 0, self.WIDTH, self.HEIGHT, fill=roadside_color, outline="")
 
     def spawn_fixed_obstacle(self, lane, y_pos, obs_type):
         if obs_type == "block":
             color = "#8B4513"
-            w, h = 25, 25
+            w = int(25 * self.scale_x)
+            h = int(25 * self.scale_y)
         elif obs_type == "rock":
             color = "#696969"
-            w, h = 22, 22
+            w = int(22 * self.scale_x)
+            h = int(22 * self.scale_y)
         elif obs_type == "tree":
             color = "#006400"
-            w, h = 20, 35
+            w = int(20 * self.scale_x)
+            h = int(35 * self.scale_y)
         elif obs_type == "cone":
             color = "#FF6600"
-            w, h = 18, 25
+            w = int(18 * self.scale_x)
+            h = int(25 * self.scale_y)
         elif obs_type == "box":
             color = "#8B6914"
-            w, h = 25, 25
+            w = int(25 * self.scale_x)
+            h = int(25 * self.scale_y)
         else:
             color = "#FFA500"
-            w, h = 20, 20
+            w = int(20 * self.scale_x)
+            h = int(20 * self.scale_y)
 
-        x = LANE_POSITIONS[lane]
+        x = self.LANE_POSITIONS[lane]
 
         obs = self.canvas.create_rectangle(
             x - w // 2, y_pos - h // 2,
             x + w // 2, y_pos + h // 2,
-            fill=color, outline="yellow", width=2
+            fill=color, outline="yellow", width=int(2 * min(self.scale_x, self.scale_y))
         )
 
         self.obstacles.append({
@@ -615,15 +705,18 @@ class RacingGame:
                 self.canvas.delete(item)
 
         self.finish_line = []
-        for i in range(ROAD_LEFT, ROAD_RIGHT, 50):
+        step = int(50 * self.scale_x)
+        for i in range(self.ROAD_LEFT, self.ROAD_RIGHT, step):
             rect = self.canvas.create_rectangle(
-                i, self.finish_line_y, i + 40, self.finish_line_y + 15,
-                fill="#FFA500", outline="white", width=2
+                i, self.finish_line_y, i + int(40 * self.scale_x), self.finish_line_y + int(15 * self.scale_y),
+                fill="#FFA500", outline="white", width=int(2 * min(self.scale_x, self.scale_y))
             )
             self.finish_line.append(rect)
 
-        text = self.canvas.create_text(ROAD_CENTER, self.finish_line_y - 20, text="ФИНИШ",
-                                       font=("Arial", 30, "bold"), fill="#FFA500")
+        font_size = int(30 * min(self.scale_x, self.scale_y))
+        text = self.canvas.create_text(self.ROAD_CENTER, self.finish_line_y - int(20 * self.scale_y),
+                                       text="ФИНИШ",
+                                       font=("Arial", font_size, "bold"), fill="#FFA500")
         self.finish_line.append(text)
         self.finish_visible = True
 
@@ -644,9 +737,9 @@ class RacingGame:
 
     def load_best(self, track_name):
         if track_name == "forest":
-            save_file = SAVE_FILE_FOREST
+            save_file = self.SAVE_FILE_FOREST
         else:
-            save_file = SAVE_FILE_CITY
+            save_file = self.SAVE_FILE_CITY
 
         if os.path.exists(save_file):
             try:
@@ -658,9 +751,9 @@ class RacingGame:
 
     def save_best(self, current):
         if self.current_track == "forest":
-            save_file = SAVE_FILE_FOREST
+            save_file = self.SAVE_FILE_FOREST
         else:
-            save_file = SAVE_FILE_CITY
+            save_file = self.SAVE_FILE_CITY
 
         best = self.load_best(self.current_track)
         if best is None or current < best:
@@ -672,7 +765,7 @@ class RacingGame:
     def show_finish_window(self, race_time, is_new_record=False):
         finish_window = tk.Toplevel(self.root)
         finish_window.title("Финиш!")
-        finish_window.geometry(f"{WIDTH}x{HEIGHT}")
+        finish_window.geometry(f"{self.WIDTH}x{self.HEIGHT}")
         finish_window.state("zoomed")
         finish_window.configure(bg="#1a1a2e")
         finish_window.transient(self.root)
@@ -681,70 +774,77 @@ class RacingGame:
         center_frame = tk.Frame(finish_window, bg="#1a1a2e")
         center_frame.place(relx=0.5, rely=0.5, anchor="center")
 
+        title_font_size = int(80 * min(self.scale_x, self.scale_y))
         tk.Label(
             center_frame,
             text="ФИНИШ!",
-            font=("Arial", 80, "bold"),
+            font=("Arial", title_font_size, "bold"),
             fg="#00FF00",
             bg="#1a1a2e"
-        ).pack(pady=50)
+        ).pack(pady=int(50 * self.scale_y))
 
+        time_font_size = int(48 * min(self.scale_x, self.scale_y))
         tk.Label(
             center_frame,
             text=f"Ваше время: {race_time:.2f} сек",
-            font=("Arial", 48),
+            font=("Arial", time_font_size),
             fg="yellow",
             bg="#1a1a2e"
-        ).pack(pady=30)
+        ).pack(pady=int(30 * self.scale_y))
 
         best = self.load_best(self.current_track)
+        record_font_size = int(36 * min(self.scale_x, self.scale_y))
         if best:
             if is_new_record:
                 tk.Label(
                     center_frame,
                     text="★ НОВЫЙ РЕКОРД! ★",
-                    font=("Arial", 36, "bold"),
+                    font=("Arial", record_font_size, "bold"),
                     fg="#FFD700",
                     bg="#1a1a2e"
-                ).pack(pady=20)
+                ).pack(pady=int(20 * self.scale_y))
             else:
                 tk.Label(
                     center_frame,
                     text=f"Рекорд трассы: {best:.2f} сек",
-                    font=("Arial", 32),
+                    font=("Arial", int(32 * min(self.scale_x, self.scale_y))),
                     fg="#FFD700",
                     bg="#1a1a2e"
-                ).pack(pady=20)
+                ).pack(pady=int(20 * self.scale_y))
         else:
             tk.Label(
                 center_frame,
                 text="★ НОВЫЙ РЕКОРД! ★",
-                font=("Arial", 36, "bold"),
+                font=("Arial", record_font_size, "bold"),
                 fg="#FFD700",
                 bg="#1a1a2e"
-            ).pack(pady=20)
+            ).pack(pady=int(20 * self.scale_y))
+
+        btn_font_size = int(28 * min(self.scale_x, self.scale_y))
+        btn_width = int(400 * self.scale_x)
+        btn_height = int(60 * self.scale_y)
 
         tk.Button(
             center_frame,
             text="ПОПРОБОВАТЬ СНОВА",
-            font=("Arial", 28, "bold"),
+            font=("Arial", btn_font_size, "bold"),
             bg="green",
             fg="white",
-            width=20,
+            width=int(20 * self.scale_x),
             cursor="hand2",
             command=lambda: self.restart_game(finish_window)
-        ).pack(pady=30)
+        ).pack(pady=int(30 * self.scale_y))
 
         tk.Button(
             center_frame,
             text="ГЛАВНОЕ МЕНЮ",
-            font=("Arial", 28, "bold"),
+            font=("Arial", btn_font_size, "bold"),
             bg="orange",
             fg="white",
-            width=20,
+            width=int(20 * self.scale_x),
             cursor="hand2",
             command=lambda: self.exit_to_menu_from_window(finish_window)
-        ).pack(pady=15)
+        ).pack(pady=int(15 * self.scale_y))
 
         finish_window.bind("<Escape>", lambda e: self.exit_to_menu_from_window(finish_window))
         finish_window.focus_set()
@@ -754,10 +854,8 @@ class RacingGame:
         if self.finished or not self.race_started or self.finish_triggered:
             return
 
-        # Проверяем для игрока
         player_remaining = self.total_distance - self.player_distance
 
-        # Если игрок достиг финиша
         if player_remaining <= -10:
             self.finish_triggered = True
             self.finished = True
@@ -770,7 +868,7 @@ class RacingGame:
     def show_game_over_window(self):
         game_over_window = tk.Toplevel(self.root)
         game_over_window.title("Авария")
-        game_over_window.geometry(f"{WIDTH}x{HEIGHT}")
+        game_over_window.geometry(f"{self.WIDTH}x{self.HEIGHT}")
         game_over_window.state("zoomed")
         game_over_window.configure(bg="#1a1a2e")
         game_over_window.transient(self.root)
@@ -779,44 +877,50 @@ class RacingGame:
         center_frame = tk.Frame(game_over_window, bg="#1a1a2e")
         center_frame.place(relx=0.5, rely=0.5, anchor="center")
 
+        title_font_size = int(80 * min(self.scale_x, self.scale_y))
         tk.Label(
             center_frame,
             text="АВАРИЯ!",
-            font=("Arial", 80, "bold"),
+            font=("Arial", title_font_size, "bold"),
             fg="red",
             bg="#1a1a2e"
-        ).pack(pady=50)
+        ).pack(pady=int(50 * self.scale_y))
 
         race_time = time.time() - self.start_time
+        text_font_size = int(36 * min(self.scale_x, self.scale_y))
         tk.Label(
             center_frame,
             text=f"Вы врезались в препятствие!\nВремя: {race_time:.2f} сек",
-            font=("Arial", 36),
+            font=("Arial", text_font_size),
             fg="white",
             bg="#1a1a2e"
-        ).pack(pady=30)
+        ).pack(pady=int(30 * self.scale_y))
+
+        btn_font_size = int(28 * min(self.scale_x, self.scale_y))
+        btn_width = int(400 * self.scale_x)
+        btn_height = int(60 * self.scale_y)
 
         tk.Button(
             center_frame,
             text="ПОПРОБОВАТЬ СНОВА",
-            font=("Arial", 28, "bold"),
+            font=("Arial", btn_font_size, "bold"),
             bg="green",
             fg="white",
-            width=20,
+            width=int(20 * self.scale_x),
             cursor="hand2",
             command=lambda: self.restart_game(game_over_window)
-        ).pack(pady=30)
+        ).pack(pady=int(30 * self.scale_y))
 
         tk.Button(
             center_frame,
             text="ГЛАВНОЕ МЕНЮ",
-            font=("Arial", 28, "bold"),
+            font=("Arial", btn_font_size, "bold"),
             bg="orange",
             fg="white",
-            width=20,
+            width=int(20 * self.scale_x),
             cursor="hand2",
             command=lambda: self.exit_to_menu_from_window(game_over_window)
-        ).pack(pady=15)
+        ).pack(pady=int(15 * self.scale_y))
 
         game_over_window.bind("<Escape>", lambda e: self.exit_to_menu_from_window(game_over_window))
         game_over_window.focus_set()
@@ -895,13 +999,11 @@ class RacingGame:
 
         if not self.paused:
 
-            # Управление скоростью игрока
             if self.key_up:
                 self.game_speed = min(15, self.game_speed + 0.2)
             if self.key_down:
                 self.game_speed = max(2, self.game_speed - 0.2)
 
-            # Управление поворотами игрока
             if self.key_left and self.player_position_index > 0:
                 self.player_position_index -= 1
                 self.move_car_to_position(self.player, self.player_position_index)
@@ -911,19 +1013,19 @@ class RacingGame:
                 self.move_car_to_position(self.player, self.player_position_index)
                 self.root.after(80, lambda: None)
 
-            # Обновление расстояния
             if not self.finished:
                 self.player_distance += self.game_speed
 
-            # Движение линий разметки
             scroll_speed = self.game_speed
             for line in self.lines:
                 self.canvas.move(line, 0, scroll_speed)
                 coords = self.canvas.coords(line)
-                if coords and coords[1] > HEIGHT:
-                    self.canvas.coords(line, ROAD_CENTER - 5, -80, ROAD_CENTER + 5, -40)
+                if coords and coords[1] > self.HEIGHT:
+                    self.canvas.coords(line, self.ROAD_CENTER - int(5 * self.scale_x),
+                                       -int(80 * self.scale_y),
+                                       self.ROAD_CENTER + int(5 * self.scale_x),
+                                       -int(40 * self.scale_y))
 
-            # Движение городских зданий
             if hasattr(self, 'buildings'):
                 for building in self.buildings:
                     self.canvas.move(building["id"], 0, scroll_speed)
@@ -933,33 +1035,30 @@ class RacingGame:
                     building["y"] += scroll_speed
 
                     coords = self.canvas.coords(building["id"])
-                    if coords and coords[1] > HEIGHT + 300:
-                        new_y = -building["height"] - random.randint(0, 500)
+                    if coords and coords[1] > self.HEIGHT + int(300 * self.scale_y):
+                        new_y = -building["height"] - random.randint(0, int(500 * self.scale_y))
                         dy = new_y - building["y"]
                         self.canvas.move(building["id"], 0, dy)
                         for window in building["windows"]:
                             self.canvas.move(window, 0, dy)
                         building["y"] = new_y
 
-            # Движение препятствий
             for obs in self.obstacles[:]:
                 self.canvas.move(obs["id"], 0, scroll_speed)
                 obs["y"] += scroll_speed
 
-                if obs["y"] > HEIGHT + 200:
+                if obs["y"] > self.HEIGHT + int(200 * self.scale_y):
                     self.canvas.delete(obs["id"])
                     self.obstacles.remove(obs)
 
-            # Проверка столкновений
             if not self.finished and self.check_collision(self.player, self.obstacles):
                 self.game_over = True
                 self.race_started = False
                 self.show_game_over_window()
                 return
 
-            # Финишная линия
             remaining = self.total_distance - self.player_distance
-            if remaining <= 500 and not self.finish_visible:
+            if remaining <= int(500 * self.scale_y) and not self.finish_visible:
                 self.spawn_finish_line()
 
             if not self.finished and self.finish_visible and self.finish_line:
@@ -968,7 +1067,6 @@ class RacingGame:
 
             self.check_finish_by_distance()
 
-            # Обновление UI
             if not self.finished:
                 race_time = time.time() - self.start_time
                 speed_kmh = int(self.game_speed * 12)
@@ -981,17 +1079,18 @@ class RacingGame:
 
                 self.info.config(text=txt, fg="white")
 
-                # Прогресс-бар
                 self.canvas.delete("progress")
-                progress_width = 400
+                progress_width = int(400 * self.scale_x)
                 player_progress = min(1.0, self.player_distance / self.total_distance)
-                bar_x = WIDTH // 2 - progress_width // 2
+                bar_x = self.WIDTH // 2 - progress_width // 2
 
-                # Прогресс игрока (синий)
-                self.canvas.create_rectangle(bar_x, 20, bar_x + progress_width, 35, fill="#444", outline="white",
+                self.canvas.create_rectangle(bar_x, int(20 * self.scale_y),
+                                             bar_x + progress_width, int(35 * self.scale_y),
+                                             fill="#444", outline="white",
                                              tags="progress")
-                self.canvas.create_rectangle(bar_x, 20, bar_x + progress_width * player_progress, 35, fill="#3366FF",
-                                             outline="", tags="progress")
+                self.canvas.create_rectangle(bar_x, int(20 * self.scale_y),
+                                             bar_x + progress_width * player_progress, int(35 * self.scale_y),
+                                             fill="#3366FF", outline="", tags="progress")
 
         self.root.after(16, self.update)
 
